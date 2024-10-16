@@ -1,0 +1,14 @@
+x = 30, elapsed_time = 4.9135 seconds
+x = 30, elapsed_time = 4.8772 seconds
+x = 36, elapsed_time = 22.6884 seconds
+x = 38, elapsed_time = 38.6285 seconds
+x = 50, elapsed_time = 215.2442 seconds
+x = 50, elapsed_time = 512.7801 seconds
+x = 50, elapsed_time = 261.4950 seconds
+x = 30, elapsed_time = 4.7105 seconds
+x = 30, elapsed_time = 5.6225 seconds
+x = 30, elapsed_time = 6.4713 seconds
+x = 30, elapsed_time = 5.1256 seconds
+x = 30, elapsed_time = 5.3479 seconds
+x = 30, elapsed_time = 4.6147 seconds
+x = 30, elapsed_time = 10.0549 seconds

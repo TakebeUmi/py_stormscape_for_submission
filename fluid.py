@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.ndimage import map_coordinates, spline_filter
 from scipy.sparse.linalg import factorized
+import time
 
 from numerical import difference, operator
 
@@ -9,18 +10,32 @@ class Fluid:
     def __init__(self, shape, *quantities, pressure_order=1, advect_order=3):
         self.shape = shape
         self.dimensions = len(shape)
-
+        print('shape and dimension calculated')
         # Prototyping is simplified by dynamically 
         # creating advected quantities as needed.
         self.quantities = quantities
         for q in quantities:
             setattr(self, q, np.zeros(shape))
-
+        print('setattr calculated')
         self.indices = np.indices(shape)
+        #indices...行番号と列番号を格納した同じ形の行列を返す
         self.velocity = np.zeros((self.dimensions, *shape))
+        #shapeと同じ形の行列を次元の個数(ベクトルの要素の数)用意する
 
         laplacian = operator(shape, difference(2, pressure_order))
+        #factorized...引数の行列AをLU分解して、Ax=bの解xを求める際に使用する.その際、bは後から与える
+        print('operator calculated')
+        start_time = time.time()
+        #時間がかかっていたため計測した
         self.pressure_solver = factorized(laplacian)
+        elapsed_time = time.time() - start_time
+        x = shape[0]
+        file_name = 'time_memo.txt'
+        with open(file_name, "a") as file:
+            file.write(f"x = {x}, elapsed_time = {elapsed_time:.4f} seconds\n")
+        #計測した時間をメモ
+
+        print('LU decomposed')
         
         self.advect_order = advect_order
 
@@ -62,6 +77,7 @@ class Fluid:
 
         # Apply the pressure correction to the fluid's velocity field.
         pressure = self.pressure_solver(divergence.flatten()).reshape(self.shape)
+        #pressure_solverは圧力の差分行列が仕込まれたfactorized関数。これに右辺を入れることで計算を行う。これは陰解法を解くのに有効な手段である。
         self.velocity -= np.gradient(pressure)
 
         return divergence, curl, pressure
