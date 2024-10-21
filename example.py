@@ -42,7 +42,7 @@ bottom = RESOLUTION[2] //10
 inflow_velocity[2, half_minus:half_plus,half_minus:half_plus,:bottom] = INFLOW_VELOCITY
 inflow_dye[half_minus:half_plus,half_minus:half_plus,:bottom] = 1.0
 print('animation_calculating')
-frames = []
+#frames = []
 for f in range(DURATION):
     print(f'Computing frame {f + 1} of {DURATION}.')
     if f <= INFLOW_DURATION:
