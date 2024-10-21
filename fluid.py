@@ -7,13 +7,15 @@ from numerical import difference, operator
 
 
 class Fluid:
-    def __init__(self, shape, *quantities, pressure_order=1, advect_order=3):
+    def __init__(self, shape, *quantities_vapor, *quantities_clouddrop, *quantities_raindrop, pressure_order=1, advect_order=3):
         self.shape = shape
         self.dimensions = len(shape)
         print('shape and dimension calculated')
         # Prototyping is simplified by dynamically 
         # creating advected quantities as needed.
-        self.quantities = quantities
+        self.quantities_clouddrop = quantities_clouddrop
+        self.quantities_raindrop = quantities_raindrop
+        self.quantities_vapor = quantities_vapor
         for q in quantities:
             setattr(self, q, np.zeros(shape))
         print('setattr calculated')
@@ -21,8 +23,15 @@ class Fluid:
         #indices...行番号と列番号を格納した同じ形の行列を返す
         self.velocity = np.zeros((self.dimensions, *shape))
         #shapeと同じ形の行列を次元の個数(ベクトルの要素の数)用意する
+        self.vorticity = np.zeros((self.dimensions, *shape))
+        self.vorticity_confinement((self.dimensions, *shape))
+        self.buoyancy = np.zeros((self.dimensions, *shape))
+        self.vapor_quantities = np.zeros(self.dimensions)
+        self.raindrop_quantities = np.zeros(self.dimensions)
+        self.clouddrop_quantities = np.zeros(self.dimensions)
 
         laplacian = operator(shape, difference(2, pressure_order))
+        rotate = operator(shape, )
         #factorized...引数の行列AをLU分解して、Ax=bの解xを求める際に使用する.その際、bは後から与える
         print('operator calculated')
         start_time = time.time()
