@@ -1,3 +1,4 @@
+###使うライブラリの選択
 import numpy as np
 
 from scipy.special import erf
@@ -7,9 +8,13 @@ import pyopenvdb as vdb
 from PIL import Image
 import os
 
+###定数の具体的な値
 xyz = 30
 RESOLUTION =(xyz, ) * 3
 DURATION = 200
+#今は適当な値を入れてるので後で値入れる
+EPSILON = 0.01
+DELTA_X = 0.1
 
 INFLOW_PADDING = 40
 INFLOW_DURATION = 60
@@ -17,6 +22,7 @@ INFLOW_RADIUS = 8
 INFLOW_VELOCITY = 1
 INFLOW_COUNT = 5
 
+###Fluidインスタンスの作成
 print('Generating fluid solver, this may take some time.')
 fluid = Fluid(RESOLUTION, 'dye')
 
@@ -28,6 +34,9 @@ fluid = Fluid(RESOLUTION, 'dye')
 #3dにするにあたってここを改善
 #normals = tuple(-p for p in points)
 #points = tuple(r * p + center for p in points)
+
+###計算条件の設定
+
 print('class calculated')
 inflow_velocity = np.zeros_like(fluid.velocity)
 inflow_dye = np.zeros(fluid.shape)
@@ -43,6 +52,9 @@ inflow_velocity[2, half_minus:half_plus,half_minus:half_plus,:bottom] = INFLOW_V
 inflow_dye[half_minus:half_plus,half_minus:half_plus,:bottom] = 1.0
 print('animation_calculating')
 #frames = []
+
+###DURATIONの回数だけ計算を反復する
+
 for f in range(DURATION):
     print(f'Computing frame {f + 1} of {DURATION}.')
     if f <= INFLOW_DURATION:
@@ -61,6 +73,9 @@ for f in range(DURATION):
     print(curl.shape)
     #curlはそのままでは3*20*20*20の３次元ベクトル量。２次元の時はベクトルの大きさを取ってスカラー量で出力していたのでdstackの処理で詰まることはなかったが、３次元の場合はnormを取って20*20*20にする
     color = np.dstack((curl, np.ones(fluid.shape), fluid.dye))
+
+    #####以下は書き出し
+
     dye_grid = vdb.FloatGrid()
     dye_grid.copyFromArray(fluid.dye)
     #課題：fluid.dyeの描画。np.arrayからopenvdbへ
