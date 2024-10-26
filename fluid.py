@@ -203,9 +203,17 @@ class Fluid:
          return qvs
          
     def update_quantities(self):
+         qvs = self.getSaturationRatio(self, 'pressure')
          qv = np.copy(self.quantities_vapor)
          qc = np.copy(self.quantities_clouddrop)
          qr = np.copy(self.quantities_raindrop)
+         change = qvs - qv
+         for i in len(self.shape[0]):
+            for j in len(self.shape[1]):
+                for k in len(self.shape[2]):
+                    self.quantities_vapor[i,j,k] = qv + min(change[i,j,k], qc[i,j,k])
+                    self.quantities_clouddrop[i,j,k] = qc - min(change[i,j,k], qc[i,j,k])
+                    self.quantities_raindrop[i,j,k] = qr 
 
     def step(self):
         velocity_0 = np.copy(self.velocity)
