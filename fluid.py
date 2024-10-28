@@ -207,14 +207,79 @@ class Fluid:
          a = dt*diff*MAX**3
          return self.lin_solve(b, x, x0, x0, a, 1+6*a)
      
-     def advect(self, b, d, d0, u, v, w, dt):
+     def advect_velocity(self, b, d, d0, u, v, w, dt):
          dtx=dty=dtz=dt * max((self.shape[0], self.shape[1]), self.shape[2])
          v1 = np.copy(self.velocity)
+         v0 = np.copy(self.velocity)
          for i in range(self.shape[0]):
              for j in range(self.shape[1]):
                  for k in range(self.shape[2]):
                      if (i+1<self.shape[0]):
                          orig = (i+1.0, 0.5+j, 0.5+k)
+                         vx = self.get_face_value(v1, orig, AXIS.X)
+                         vy = self.get_face_value(v1, orig, AXIS.Y)
+                         vz = self.get_face_value(v1, orig, AXIS.Z)
+                         p = self.trace(orig, (vx,vy,vz), dt)
+                         v0[0,i+1,j,k] = self.get_face_value(v1[0],p,AXIS.X)
+    
+                     if (j+1<self.shape[1]):
+                         orig = (i+0.5, j+1.0, 0.5+k)
+                         vx = self.get_face_value(v1, orig, AXIS.X)
+                         vy = self.get_face_value(v1, orig, AXIS.Y)
+                         vz = self.get_face_value(v1, orig, AXIS.Z)
+                         p = self.trace(orig, (vx,vy,vz), dt)
+                         v0[0,i,j+1,k] = self.get_face_value(v1[1],p,AXIS.X)
+                    
+                    if (k+1<self.shape[1]):
+                         orig = (i+0.5, j+0.5, k+1.0)
+                         vx = self.get_face_value(v1, orig, AXIS.X)
+                         vy = self.get_face_value(v1, orig, AXIS.Y)
+                         vz = self.get_face_value(v1, orig, AXIS.Z)
+                         p = self.trace(orig, (vx,vy,vz), self.delta_t)
+                         v0[0,i,j,k+1] = self.get_face_value(v1[2],p,AXIS.X)
+         return v0
+     
+     def advect_scalar_field(self):
+        v1 = self.velocity
+        qc = np.copy(self.quantities_clouddrop)
+        qr = np.copy(self.quantities_raindrop)
+        qv = np.copy(self.quantities_vapor)
+        T = np.copy(self.temperature)
+        for i in range(self.shape[0]):
+             for j in range(self.shape[1]):
+                 for k in range(self.shape[2]):
+                    center = (0.5+i, 0.5+j, 0.5+k)
+                    v_orig = (self.get_face_value(v1[0], center, AXIS.X), self.get_face_value(v1[1], center, AXIS.Y), get_face_value(v1[2], center, AXIS.Z))
+                    p = self.trace(center, v_orig, self.delta_t)
+                    qc[i,j,k] = self.get_center_value(qc,p)
+                    qv[i,j,k] = self.get_center_value(qv,p)
+                    qr[i,j,k] = self.get_center_value(qr,p)
+                    T[i,j,k] = self.get_center_value(T,p)
+        return qc,qv,qr,T
+     
+     def project_pressure(self):
+        inv_dt = 1.0 /self.delta_t
+        A = np.zeros(self.shape)
+        b = np.zeros(self.shape).rehape(self.shape[0] * self.shape[1] * self.shape[2],1,1)
+        v0 = self.velocity
+        for i in range(self.shape[0]):
+            for j in range(self.shape[1]):
+                for k in range(self.shape[2]):
+                    vx1 = self.get_value(i+1,j,k,v[0])
+                    vx0 = self.get_value(i,j,k,v0[0])
+
+                    vy1 = self.get_value(i,j+1,k,v0[1])
+                    vy0 = self.get_value(i,j,k,v0[1])
+
+                    vz1 = self.get_value(i,j,k+1,v0[2])
+                    vz0 = self.get_value(i,j,k,v0[2])
+                    b[i + self.shape[0] * j + self.shape[0] * self.shape[1] * k] = (vx1 + vy1 + vz1 - vx0 - vy0 - vz0) * inv_dt
+
+                    
+
+
+
+
 
 
      def rotate(self,vector_field):
