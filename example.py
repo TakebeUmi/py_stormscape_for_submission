@@ -9,35 +9,36 @@ from PIL import Image
 import os
 
 ###定数の具体的な値
-xyz = 30
+xyz = 50
 RESOLUTION =(xyz, ) * 3
-DURATION = 200
+DURATION = 500
 #今は適当な値を入れてるので後で値入れる
 EPSILON = 0.01
 DELTA_X = 0.1
 
-INFLOW_PADDING = 40
-INFLOW_DURATION = 60
-INFLOW_RADIUS = 8
-INFLOW_VELOCITY = 1
-INFLOW_COUNT = 5
+# INFLOW_PADDING = 40
+# INFLOW_DURATION = 60
+# INFLOW_RADIUS = 8
+# INFLOW_VELOCITY = 1
+# INFLOW_COUNT = 5
 # 必須の引数
-shape = (100, 100, 100)
-delta_x = 0.01 #m
+#shape, *quantities, delta_x, epsilon, delta_t, z1, externalForce, phi_rel, gamma_heat, gamma_vapor, E
+delta_x = 50 #m 全長3840m * 1520m * 3840m
 epsilon = 0.25
-delta_t = 60 #s
+delta_t = 10 #s
 z1 = 8000 #m
 externalForce = [0.0, 0.0, 0.0]
-phi_rel = 0.8
+phi_rel = 0.9
 gamma_heat = 0.3
-gamma_vapor = 0.0
-
+gamma_vapor = 0.295
+E = 7.0
+#E,gamma_heat,gamma_vapor,phi_relが形状を決定する
 # オプションの引数 quantities のみ指定し、pressure_order と advect_order を省略
-quantities = ('clouddrop','raindrop','vapor')
+quantities = ('quantities_clouddrop','quantities_raindrop','quantities_vapor')
 
 # Fluidインスタンスの作成（pressure_order と advect_order は省略）
 cloud = Fluid(
-    shape, *quantities,
+    RESOLUTION, *quantities,
     delta_x=delta_x,
     epsilon=epsilon,
     delta_t=delta_t,
@@ -45,12 +46,13 @@ cloud = Fluid(
     externalForce=externalForce,
     phi_rel=phi_rel,
     gamma_heat=gamma_heat,
-    gamma_vapor=gamma_vapor
+    gamma_vapor=gamma_vapor,
+    E=E
 )
 ###Fluidインスタンスの作成
 #1.shape 2.quantities 3.
-print('Generating fluid solver, this may take some time.')
-fluid = Fluid(RESOLUTION, 'dye')
+#print('Generating fluid solver, this may take some time.')
+#fluid = Fluid(RESOLUTION, 'dye')
 
 #center = np.floor_divide(RESOLUTION, 2)
 #r = np.min(center) - INFLOW_PADDING
@@ -76,11 +78,11 @@ print('class calculated')
 # bottom = RESOLUTION[2] //10
 # inflow_velocity[2, half_minus:half_plus,half_minus:half_plus,:bottom] = INFLOW_VELOCITY
 # inflow_dye[half_minus:half_plus,half_minus:half_plus,:bottom] = 1.0
-print('animation_calculating')
+#print('animation_calculating')
 #frames = []
 
 ###DURATIONの回数だけ計算を反復する
-
+x = cloud.shape[0]
 for f in range(DURATION):
     print(f'Computing frame {f + 1} of {DURATION}.')
     # if f <= INFLOW_DURATION:
@@ -89,7 +91,7 @@ for f in range(DURATION):
     #ctrl+/で一括コメントアウト
     
 
-    fluid.step()
+    cloud.step()
     # Using the error function to make the contrast a bit higher. 
     # Any other sigmoid function e.g. smoothstep would work.
     # curl = (erf(curl * 2) + 1) / 4
@@ -104,17 +106,25 @@ for f in range(DURATION):
     #####以下は書き出し
 
     vdb_grid = vdb.FloatGrid()
-    vdb_grid.copyFromArray(fluid.quantities_clouddrop)
+    vdb_grid_100 = vdb.FloatGrid()
+    vdb_grid.copyFromArray(cloud.quantities_clouddrop * 10)
+    vdb_grid_100.copyFromArray(cloud.quantities_clouddrop * 100)
     #課題：fluid.dyeの描画。np.arrayからopenvdbへ
-    x = fluid.shape[0]
     output_dir = f"output_cube_fluid_{x}"
+    output_dir_100 = f"output_cube_fluid_100times_{x}"
     os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(output_dir_100, exist_ok=True)
     file_name = f"{output_dir}/output_cube_fluid_{x}_frame_{f:04d}.vdb"
+    file_name_100 = f"{output_dir}/output_cube_fluid_100times_{x}_frame_{f:04d}.vdb"
     vdb.write(file_name, grids=[vdb_grid])
+    file_name = 'density_memo.txt'
+    with open(file_name, "a") as file:
+            file.write(f"{cloud.quantities_clouddrop}\n")
     #print('color_shape=',color.shape)
     #color = (np.clip(color, 0, 1) * 255).astype('uint8')
     #frames.append(Image.fromarray(color, mode='HSV').convert('RGB'))
 
 print('Saving simulation result.')
+
 #frames[0].save('example3d.gif', save_all=True, append_images=frames[1:], duration=20, loop=0)
 #課題：100*100*100のグリッドの10*10*10の領域で速度１を供給する

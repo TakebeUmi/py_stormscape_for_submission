@@ -14,20 +14,20 @@ class AXIS:
     Z = 3
 
 class Fluid:
-     def __init__(self, shape, *quantities, pressure_order=1, advect_order=3, delta_x, epsilon, delta_t, z1, externalForce, phi_rel, gamma_heat, gamma_vapor):
+     def __init__(self, shape, *quantities, delta_x, epsilon, delta_t, z1, externalForce, phi_rel, gamma_heat, gamma_vapor, E):
         #グリッドとソルバーの作成
         self.shape = shape
         self.time = 0.0
         self.epsilon = epsilon
         self.delta_x = delta_x
         self.delta_t = delta_t
-        self.M_air = 28.96 #g/mol
-        self.M_W = 18.02 #g/mol
+        self.M_air = 28.96 * 1e-3 #kg/mol
+        self.M_W = 18.02 * 1e-3 #kg/mol
         self.gamma = 0.0065 #K/m
         self.one_atm = np.zeros(shape)
         self.one_atm[:,:,:] = 101300
         #１気圧＝101325パスカル=
-        self.E = 1
+        self.E = E
         self.generalGasConstant = 8.31
         #J/molK
         self.T_ISA = 273
@@ -39,6 +39,7 @@ class Fluid:
         self.alpha_A = 1.0e-3
         self.alpha_K = 1.0
         self.alpha_E = 1.0e-1
+        self.nu = 1.71 * 1e-6 #m2/s
         self.vapor_map = np.zeros(shape[:2])
         self.heat_map = np.zeros(shape[:2])
         scale = 10.0
@@ -48,23 +49,27 @@ class Fluid:
                   self.heat_map[i,j] = pnoise2(i / scale, j / scale, octaves=4, persistence=0.5, lacunarity=2.0, repeatx=1024, repeaty=1024, base=0)
 
         self.theta = np.zeros(shape)
-        self.pressure = self.pressure_altitude_field()
-        self.pressure_0 = np.zeros(shape)
+
         self.temperature_0 = np.zeros(shape)
         self.Rd = 287 #J/(kg K)
         self.latenthead = 2.5
         #J/kg
+        MAX = max(max(self.shape[0], self.shape[1]), self.shape[2])
+        self.a = self.delta_t*self.nu*MAX**3
         def f(z, z1):
              if z*delta_x <= z1:
                   return self.T_ISA + self.gamma * z * self.delta_x
              else:
                   return self.T_ISA + (2 * self.gamma * z1 - self.gamma * z * self.delta_x) 
         def Temperature_altitude(z1):
-            z = np.arrange(shape[2])
-            z = z[None, None, :]
-            for k in range(z1):
-                 z[:, :, k] = f(k, z1)
+            z = np.zeros(shape)
+            for k in range(shape[2]):
+                 for i in range(shape[0]):
+                     for j in range(shape[1]):
+                        z[i,j,k] = f(k, z1)
             return z
+        
+        self.temperature_altitude = Temperature_altitude(z1)
         
         self.T_air = Temperature_altitude(z1)
         self.temperature = self.T_air
@@ -72,37 +77,39 @@ class Fluid:
         self.dimensions = len(shape)
         print('shape and dimension calculated')
         # Prototyping is simplified by dynamically 
-        # creating advected quantities as needed.
-        self.quantities_clouddrop = quantities[0]
-        self.quantities_raindrop = quantities[1]
-        self.quantities_vapor = quantities[2]
-        self.quantities_sum_water = quantities[0] + quantities[1] + quantities[2]
-        self.quantities_dryair = 1.293
-        #kg/m3
+        # creating advected quantities as needed.F
         self.externalForce = externalForce
-        height_grid = np.arange(shape[2]).reshape(shape[2], 1, 1)
+        height_grid = np.arange(shape[2]).reshape(1, 1, shape[2])
         # それを10x10の平面全体にブロードキャストして、高さの配列を生成
         self.height_grid = np.broadcast_to(height_grid, shape) * delta_x
-        #高さはkm表示。そのためにdelta_xで調整。必要であれば追加
-        initial_vapor_distribution = np.zeros(shape[2])
-
-        for k in range(shape[2]):
-             initial_vapor_distribution[k] = math.exp(-2.29e-4 * self.height_grid + 1)
-        initial_vapor_distribution = np.broadcast_to(initial_vapor_distribution.reshape(shape[2], 1, 1), shape)
-        self.quantities_vapor = initial_vapor_distribution
-
+        print(self.height_grid.shape)
         for q in quantities:
             setattr(self, q, np.zeros(shape))
-        print('setattr calculated')
+        initial_vapor_distribution = np.zeros(shape)
+        for k in range(shape[2]):
+             for i in range(shape[0]):
+                 for j in range(shape[1]):
+                    initial_vapor_distribution[i,j,k] = math.exp(-5.26e-4 * self.height_grid[i,j,k] + 2.30)
+        #initial_vapor_distribution = np.broadcast_to(initial_vapor_distribution.reshape(shape[2], 1, 1), shape)
+        self.quantities_vapor = initial_vapor_distribution
+        self.quantities_sum_water = self.quantities_clouddrop + self.quantities_raindrop + self.quantities_vapor
+        self.quantities_dryair = np.full(shape, 1.293)
+        #kg/m3
+
+        #高さはkm表示。そのためにdelta_xで調整。必要であれば追加
+        self.pressure = self.pressure_altitude_field()
+        self.pressure_0 = np.zeros(shape)
+
+        # print('setattr calculated')
         self.indices = np.indices(shape)
         #indices...行番号と列番号を格納した同じ形の行列を返す
         self.velocity = np.zeros((self.dimensions, *shape))
+        self.velocity[2,shape[0]//2-shape[0]//8:shape[0]//2+shape[0]//8,shape[1]//2-shape[1]//8:shape[1]//2+shape[1]//8,0] = 2.0
         #shapeと同じ形の行列を次元の個数(ベクトルの要素の数)用意する
         self.vorticity = np.zeros((self.dimensions, *shape))
-        self.vorticity_confinement((self.dimensions, *shape))
         self.buoyancy = np.zeros((self.dimensions, *shape))
 
-        laplacian = operator(shape, difference(2, pressure_order))
+        laplacian = operator(shape, difference(2, 1))
         #factorized...引数の行列AをLU分解して、Ax=bの解xを求める際に使用する.その際、bは後から与える
         print('operator calculated')
         start_time = time.time()
@@ -119,7 +126,7 @@ class Fluid:
         
         print('LU decomposed')
         
-        self.advect_order = advect_order
+        self.advect_order = 3
         print('initialized')
      
      def get_value(self, x, y, z, q):
@@ -137,7 +144,7 @@ class Fluid:
               z = self.shape[2] - 1
           return q[x,y,z]
 
-     def get_offset(axis):
+     def get_offset(self, axis):
           offsets = {
         AXIS.X: (0, 0.5, 0.5),
         AXIS.Y: (0.5, 0, 0.5),
@@ -150,11 +157,11 @@ class Fluid:
      
      def get_face_value(self, q, p, axis):
           offset = self.get_offset(axis)
-          return self.get_interpolation(p-offset,q)
+          return self.get_interpolation(p-np.array(offset),q)
      
      def get_center_value(self,q,p):
          offset = (0.5,0.5,0.5)
-         return self.get_interpolation(p-offset,q)
+         return self.get_interpolation(p-np.array(offset),q)
      
      def trilinear_interp(self, p, q):
          x = p[0]
@@ -190,25 +197,45 @@ class Fluid:
          c = c0 * (1.0 - zd) + c1 * zd
          return c
 
-     def trace(self, orig, u, dt):
-         dir = u * dt
+     def trace(self, orig, u):
+         dir = np.zeros(self.dimensions)
+         for i in range(self.dimensions):
+             dir[i] = u[i] * self.delta_t / self.delta_x
          target = orig - dir
-         return target
+         return target #[a,b,c]
 
-     def lin_solve(self, b, x, x0, a, c):                                            
+     def lin_solve(self, x, x0, a, c):                                            
           for i in range(1,self.shape[0]-1):
                for j in range(1,self.shape[1]-1):
                     for k in range(1,self.shape[2]-1):
                          x[i,j,k] = x0[i,j,k] + a * (x[i-1,j,k] + x[i+1,j,k] + x[i,j+1,k] + x[i,j-1,k] + x[i,j,k+1] + x[i,j,k-1]) / c
           return x
 
-     def diffuse(self, b, x, x0, diff, dt):
-         MAX = max(max(self.shape[0], self.shape[1]), self.shape[2])
-         a = dt*diff*MAX**3
-         return self.lin_solve(b, x, x0, x0, a, 1+6*a)
-     
-     def advect_velocity(self, b, d, d0, u, v, w, dt):
-         dtx=dty=dtz=dt * max((self.shape[0], self.shape[1]), self.shape[2])
+     def diffuse_velocity(self):
+         v0 = np.copy(self.velocity)
+         v1 = np.copy(self.velocity)
+         self.velocity[0] = self.lin_solve(v1[0], v0[0], self.a, 1+6*self.a)
+         self.velocity[1] = self.lin_solve(v1[1], v0[1], self.a, 1+6*self.a)
+         self.velocity[2] = self.lin_solve(v1[2], v0[2], self.a, 1+6*self.a)
+         print("velocity diffusion calculated")
+
+     def diffuse_scalar_field(self):
+         qc0 = np.copy(self.quantities_clouddrop)
+         qc1 = np.copy(self.quantities_clouddrop)
+         qr0 = np.copy(self.quantities_raindrop)
+         qr1 = np.copy(self.quantities_raindrop)
+         qv0 = np.copy(self.quantities_vapor)
+         qv1 = np.copy(self.quantities_vapor)
+         T0 = np.copy(self.temperature)
+         T1 = np.copy(self.temperature)
+
+         self.quantities_clouddrop = self.lin_solve(qc1, qc0, self.a, 1+6*self.a)
+         self.quantities_raindrop = self.lin_solve(qr1, qr0, self.a, 1+6*self.a)
+         self.quantities_vapor = self.lin_solve(qv1, qv0, self.a, 1+6*self.a)
+         self.temperature = self.lin_solve(T1, T0, self.a, 1+6*self.a)
+         print("scalar diffusion calculated")
+
+     def advect_velocity(self):
          v1 = np.copy(self.velocity)
          v0 = np.copy(self.velocity)
          for i in range(self.shape[0]):
@@ -216,29 +243,36 @@ class Fluid:
                  for k in range(self.shape[2]):
                      if (i+1<self.shape[0]):
                          orig = (i+1.0, 0.5+j, 0.5+k)
-                         vx = self.get_face_value(v1, orig, AXIS.X)
-                         vy = self.get_face_value(v1, orig, AXIS.Y)
-                         vz = self.get_face_value(v1, orig, AXIS.Z)
-                         p = self.trace(orig, (vx,vy,vz), dt)
+                         orig = np.array(orig)
+                         vx = self.get_face_value(v1[0], orig, AXIS.X)
+                         vy = self.get_face_value(v1[1], orig, AXIS.Y)
+                         vz = self.get_face_value(v1[2], orig, AXIS.Z)
+                         vector = np.array([vx,vy,vz])
+                         p = self.trace(orig, vector)
                          v0[0,i+1,j,k] = self.get_face_value(v1[0],p,AXIS.X)
     
                      if (j+1<self.shape[1]):
                          orig = (i+0.5, j+1.0, 0.5+k)
-                         vx = self.get_face_value(v1, orig, AXIS.X)
-                         vy = self.get_face_value(v1, orig, AXIS.Y)
-                         vz = self.get_face_value(v1, orig, AXIS.Z)
-                         p = self.trace(orig, (vx,vy,vz), dt)
+                         orig = np.array(orig)
+                         vx = self.get_face_value(v1[0], orig, AXIS.X)
+                         vy = self.get_face_value(v1[1], orig, AXIS.Y)
+                         vz = self.get_face_value(v1[2], orig, AXIS.Z)
+                         vector = np.array([vx,vy,vz])
+                         p = self.trace(orig, vector)
                          v0[0,i,j+1,k] = self.get_face_value(v1[1],p,AXIS.X)
                     
-                    if (k+1<self.shape[1]):
+                     if (k+1<self.shape[1]):
                          orig = (i+0.5, j+0.5, k+1.0)
-                         vx = self.get_face_value(v1, orig, AXIS.X)
-                         vy = self.get_face_value(v1, orig, AXIS.Y)
-                         vz = self.get_face_value(v1, orig, AXIS.Z)
-                         p = self.trace(orig, (vx,vy,vz), self.delta_t)
+                         orig = np.array(orig)
+                         vx = self.get_face_value(v1[0], orig, AXIS.X)
+                         vy = self.get_face_value(v1[1], orig, AXIS.Y)
+                         vz = self.get_face_value(v1[2], orig, AXIS.Z)
+                         vector = np.array([vx,vy,vz])
+                         p = self.trace(orig, vector)
                          v0[0,i,j,k+1] = self.get_face_value(v1[2],p,AXIS.X)
-         return v0
-     
+         print("velocity advection calculated")           
+         self.velocity = v0
+
      def advect_scalar_field(self):
         v1 = self.velocity
         qc = np.copy(self.quantities_clouddrop)
@@ -249,38 +283,44 @@ class Fluid:
              for j in range(self.shape[1]):
                  for k in range(self.shape[2]):
                     center = (0.5+i, 0.5+j, 0.5+k)
-                    v_orig = (self.get_face_value(v1[0], center, AXIS.X), self.get_face_value(v1[1], center, AXIS.Y), get_face_value(v1[2], center, AXIS.Z))
-                    p = self.trace(center, v_orig, self.delta_t)
+                    v_orig = (self.get_face_value(v1[0], center, AXIS.X), self.get_face_value(v1[1], center, AXIS.Y), self.get_face_value(v1[2], center, AXIS.Z))
+                    p = self.trace(center, v_orig)
                     qc[i,j,k] = self.get_center_value(qc,p)
                     qv[i,j,k] = self.get_center_value(qv,p)
                     qr[i,j,k] = self.get_center_value(qr,p)
                     T[i,j,k] = self.get_center_value(T,p)
-        return qc,qv,qr,T
+        self.quantities_clouddrop = qc
+        self.quantities_raindrop = qr
+        self.quantities_vapor = qv
+        self.temperature = T
+        print("scalar advection caculated")
      
      def project_pressure(self):
-        inv_dt = 1.0 /self.delta_t
-        A = np.zeros(self.shape)
-        b = np.zeros(self.shape).rehape(self.shape[0] * self.shape[1] * self.shape[2],1,1)
-        v0 = self.velocity
+        grad = np.zeros((self.dimensions, *self.shape))
+        v = np.copy(self.velocity)
+        p = np.copy(self.pressure)
         for i in range(self.shape[0]):
             for j in range(self.shape[1]):
                 for k in range(self.shape[2]):
+                    vx0 = self.get_value(i-1,j,k,v[0])
                     vx1 = self.get_value(i+1,j,k,v[0])
-                    vx0 = self.get_value(i,j,k,v0[0])
+                    vy0 = self.get_value(i,j-1,k,v[1])
+                    vy1 = self.get_value(i,j+1,k,v[1])
+                    vz0 = self.get_value(i,j,k-1,v[2])
+                    vz1 = self.get_value(i,j,k+1,v[2])
+                    div = (vx1 - vx0 + vy1 - vy0 + vz1 - vz0) / (2 * self.delta_x)
 
-                    vy1 = self.get_value(i,j+1,k,v0[1])
-                    vy0 = self.get_value(i,j,k,v0[1])
-
-                    vz1 = self.get_value(i,j,k+1,v0[2])
-                    vz0 = self.get_value(i,j,k,v0[2])
-                    b[i + self.shape[0] * j + self.shape[0] * self.shape[1] * k] = (vx1 + vy1 + vz1 - vx0 - vy0 - vz0) * inv_dt
-
-                    
-
-
-
-
-
+                    px0 = self.get_value(i-1,j,k,p)
+                    px1 = self.get_value(i+1,j,k,p)
+                    py0 = self.get_value(i,j-1,k,p)
+                    py1 = self.get_value(i,j+1,k,p)
+                    pz0 = self.get_value(i,j,k-1,p)
+                    pz1 = self.get_value(i,j,k+1,p)
+                    p1 = (px0 + px1 + py0 + py1 + pz0 + pz1 - (self.delta_x)**2 * div) / 6
+                    grad[i,j,k] = (px1 - px0, py1 - py0, pz1 - pz0) / (2 * self.delta_x)
+        self.pressure = p1
+        self.velocity = v - grad
+        print("projection calculated")
 
      def rotate(self,vector_field):
             jacobian_shape_rotate = (self.dimensions, ) * 2
@@ -293,20 +333,38 @@ class Fluid:
         
      def divergence(self, vector_field):
             jacobian_shape_div = (self.dimensions, ) * 2
-            jacobian_div = np.stack(partials_div).reshape(*jacobian_shape_div, *self.shape)
             partials_div = tuple(np.gradient(d) for d in getattr(self, vector_field))
+            jacobian_div = np.stack(partials_div).reshape(*jacobian_shape_div, *self.shape)
             print('divergence calculated')
             return jacobian_div.trace()
 
      def grad(self, scalar_field):
+        grad = np.zeros((self.dimensions, *self.shape))
+        p = np.copy(scalar_field)
+        print(p.shape)
+        for i in range(self.shape[0]):
+            for j in range(self.shape[1]):
+                for k in range(self.shape[2]):
+                    px0 = self.get_value(i-1,j,k,p)
+                    px1 = self.get_value(i+1,j,k,p)
+                    py0 = self.get_value(i,j-1,k,p)
+                    py1 = self.get_value(i,j+1,k,p)
+                    pz0 = self.get_value(i,j,k-1,p)
+                    pz1 = self.get_value(i,j,k+1,p)
+                    a = np.array([px1 - px0, py1 - py0, pz1 - pz0])
+                    for l in range(self.dimensions):
+                        grad[i,j,k,l] = a[l] / (2 * self.delta_x)
             print('gradient calculated')
-            return np.gradient(getattr(self, scalar_field))
+            return grad
 
         #getattrで属性を持ってきてから
      def vorticity_confinement(self):
-            w = self.rotate(self, 'velocity')
-            k = np.gradient(np.linalg.norm(w))
+            w = self.rotate('velocity')
+            print(np.linalg.norm(w,axis=0).shape)
+            k = self.grad(np.linalg.norm(w,axis=0))
+            
             norm_k = np.linalg.norm(k, axis=0)
+            print(norm_k.shape)
             norm_k[norm_k == 0] = 1
             N = k / norm_k
             transpose_N = np.transpose(N, (1,2,3,0))
@@ -316,8 +374,7 @@ class Fluid:
             print('vorticity confinment calculated')
     
      def pressure_altitude_field(self):
-        print('pressure altitude calculated')
-        return ((self.T_ISA * np.ones_like(self.height_grid) - self.gamma * self.height_grid) ** 5.2561)
+        return (self.one_atm * (np.ones_like(self.height_grid) - self.gamma * self.height_grid / self.T_ISA) ** 5.2561)
      #height_gridはその地点でのm
 
      def getMoleFraction(self, quantity):
@@ -328,22 +385,22 @@ class Fluid:
         return X_i
 
      def getAverageMolarMass(self):
-        X_V = self.getMoleFraction(self, 'quantities_vapor')
+        X_V = self.getMoleFraction('quantities_vapor')
         M_th = X_V * self.M_W + (1 - X_V) * self.M_air
         print('average molar mass calculated')
         return M_th
 
      def getIsentropicExponent(self):
-        M_th = self.getAverageMolarMass(self)
-        X_V = self.getMoleFraction(self, 'quantities_vapor')
+        M_th = self.getAverageMolarMass()
+        X_V = self.getMoleFraction('quantities_vapor')
         Y_V = X_V * self.M_W / M_th
         gammma_th = Y_V * 1.33 + (np.ones_like(Y_V) - Y_V) * 1.4
         print('isentropic exponent calculated')
         return gammma_th
     
      def compute_buoyancy(self):
-        M_th = self.getAverageMolarMass(self)
-        X_V = self.getMoleFraction(self, 'quantities_vapor')
+        M_th = self.getAverageMolarMass()
+        X_V = self.getMoleFraction('quantities_vapor')
         Y_V = X_V * self.M_W / M_th
         gammma_th = Y_V * 1.33 + (np.ones_like(Y_V) - Y_V) * 1.4
         T_th = np.zeros(self.shape)
@@ -356,20 +413,26 @@ class Fluid:
         for i in range(gammma_th.shape[0]):
              for j in range(gammma_th.shape[1]):
                   for k in range(gammma_th.shape[2]):
-                       T_th[i,j,k] = self.pressure_altitude_field()[i,j,k] ** gammma_th[i,j,k]
+                       T_th[i,j,k] = self.temperature
                        B[2,i,j,k] = self.gravity * (self.M_air * T_th[i,j,k] / (M_th[i,j,k] * self.T_air[i,j,k]))
+        
         print('buoyancy calculated')
         return B
     
      def apply_b_external(self):
-         b = self.compute_buoyancy
-         e = self.externalForce
+         b = self.compute_buoyancy()
+         e = np.zeros((self.dimensions, *self.shape))
+         for i in range(self.shape[0]):
+             for j in range(self.shape[1]):
+                 for k in range(self.shape[2]):
+                     for l in range(self.dimensions):
+                      e[l,i,j,k] = self.externalForce[l]
          self.velocity += self.delta_t * (b + e)
          print('buoyancy and external force applied')
 
      def getHeatCapacity(self):
-         gamma_th = self.getAverageMolarMass(self)
-         M_th = self.getAverageMolarMass(self)
+         gamma_th = self.getAverageMolarMass()
+         M_th = self.getAverageMolarMass()
          cp_th = np.zeros(self.shape)
          for i in range(cp_th.shape[0]):
              for j in range(cp_th.shape[1]):
@@ -381,7 +444,7 @@ class Fluid:
      def potential_temperature(self):
          p0 = self.pressure_0
          p1 = self.pressure
-         kappa = self.Rd / self.getHeatCpacity(self)
+         kappa = self.Rd / self.getHeatCapacity()
          T0 = self.temperature_0
          theta = np.zeros(self.shape)
          for i in range(theta.shape[0]):
@@ -393,7 +456,7 @@ class Fluid:
 
      def getSaturationRatio(self, pressure):
          p = getattr(self, pressure)
-         T = self.temperature
+         T = self.temperature - 273
          qvs = np.zeros(self.shape)
          for i in range(qvs.shape[0]):
             for j in range(qvs.shape[0]):
@@ -404,7 +467,7 @@ class Fluid:
     
      def boundary_condition(self):
         m = 2
-        self.quantities_vapor[:,:,0] = self.phi_rel * self.getSaturationRatio(self, 'one_atm')[:,:,0] * (self.gamma_vapor * (m * self.vapor_map - 1) + 1)
+        self.quantities_vapor[:,:,0] = self.phi_rel * self.getSaturationRatio('one_atm')[:,:,0] * (self.gamma_vapor * (m * self.vapor_map - 1) + 1)
         self.temperature[:,:,0] = self.T_ISA + self.E * (self.gamma_heat * (m * self.heat_map - 1) + 1)
 
         self.velocity[2,0,:,:] = 0
@@ -420,10 +483,11 @@ class Fluid:
         self.quantities_raindrop[:,[0,-1],:] = 0
         self.quantities_clouddrop[[0,-1],:,:] = 0
         self.quantities_raindrop[[0,-1],:,:] = 0
+
         print('boundary condition applied')
          
      def update_quantities(self):
-         qvs = self.getSaturationRatio(self, 'pressure')
+         qvs = self.getSaturationRatio('pressure')
          qv = np.copy(self.quantities_vapor)
          qc = np.copy(self.quantities_clouddrop)
          qr = np.copy(self.quantities_raindrop)
@@ -434,19 +498,19 @@ class Fluid:
          for i in range(self.shape[0]):
             for j in range(self.shape[1]):
                 for k in range(self.shape[2]):
-                    self.quantities_vapor[i,j,k] = qv + min(change[i,j,k], qc[i,j,k]) + Er[i,j,k]
-                    self.quantities_clouddrop[i,j,k] = qc - min(change[i,j,k], qc[i,j,k]) - Ac[i,j,k] - Kc[i,j,k]
-                    self.quantities_raindrop[i,j,k] = qr + Ac[i,j,k] + Kc[i,j,k] - Er[i,j,k]
+                    self.quantities_vapor[i,j,k] = qv[i,j,k] + min(change[i,j,k], qc[i,j,k]) + Er[i,j,k]
+                    self.quantities_clouddrop[i,j,k] = qc[i,j,k] - min(change[i,j,k], qc[i,j,k]) - Ac[i,j,k] - Kc[i,j,k]
+                    self.quantities_raindrop[i,j,k] = qr[i,j,k] + Ac[i,j,k] + Kc[i,j,k] - Er[i,j,k]
          print('quantities updated')
     
      def update_temperature(self):
          X = np.zeros(self.shape)
-         qvs = self.getSaturationRatio(self, 'pressure')
-         cp = self.getHeatCapacity(self)
+         qvs = self.getSaturationRatio('pressure')
+         cp = self.getHeatCapacity()
          for i in range(self.shape[0]):
               for j in range(self.shape[1]):
                    for k in range(self.shape[2]):
-                        if (qvs[i,j,k] - self.quantities_vapor) < self.quantities_clouddrop:
+                        if (qvs[i,j,k] - self.quantities_vapor[i,j,k]) < self.quantities_clouddrop[i,j,k]:
                              X[i,j,k] = (qvs[i,j,k] - self.quantities_vapor[i,j,k]) / (self.quantities_sum_water[i,j,k] + self.quantities_dryair[i,j,k])
                         else:
                              X[i,j,k] = self.quantities_clouddrop[i,j,k] / (self.quantities_sum_water[i,j,k] + self.quantities_dryair[i,j,k])
@@ -458,8 +522,6 @@ class Fluid:
          print('time updated')
 
      def step(self):
-        velocity_0 = np.copy(self.velocity)
-
         # Advection is computed backwards in time as described in Stable Fluids.
         advection_map = self.indices - self.velocity
         # SciPy's spline filter introduces checkerboard divergence.
@@ -472,21 +534,48 @@ class Fluid:
 
         # Apply advection to each axis of the
         # velocity field and each user-defined quantity.
+
+
+        #1
         for d in range(self.dimensions):
             self.velocity[d] = advect(self.velocity[d])
+        self.boundary_condition()
+        #self.velocity = self.advect_velocity()
+        #2
+        self.diffuse_velocity()
+        self.boundary_condition()
+        #3,4,5
+        self.vorticity_confinement()
+        self.boundary_condition()
+        #6,7,8
+        self.apply_b_external()
+        self.boundary_condition()
+        #9,10
+        # Apply the pressure correction to the fluid's velocity field.
+        self.pressure = self.pressure_solver(self.divergence('velocity').flatten()).reshape(self.shape)
+        #pressure_solverは圧力の差分行列が仕込まれたfactorized関数。これに右辺を入れることで計算を行う。これは陰解法を解くのに有効な手段である。
+        self.velocity -= np.gradient(self.pressure)
 
-
+        #self.project_pressure()
+        #11
+        self.advect_scalar_field()
+        self.boundary_condition()
+        #12,13
+        self.update_quantities()
+        self.boundary_condition()
+        #14,15,16,17,18
+        self.update_temperature()
+        self.boundary_condition()
+        #19
+        self.update_time()
         
-        self.vorticity_confinement(self)
-        self.apply_b_external(self)
-
         # Compute the jacobian at each point in the
         # velocity field to extract curl and divergence.
-        """ jacobian_shape = (self.dimensions,) * 2
-        partials = tuple(np.gradient(d) for d in self.velocity)
-        jacobian = np.stack(partials).reshape(*jacobian_shape, *self.shape)
+        # jacobian_shape = (self.dimensions,) * 2
+        # partials = tuple(np.gradient(d) for d in self.velocity)
+        # jacobian = np.stack(partials).reshape(*jacobian_shape, *self.shape)
 
-        divergence = jacobian.trace() """
+        # divergence = jacobian.trace()
 
         # If this curl calculation is extended to 3D, the y-axis value must be negated.
         # This corresponds to the coefficients of the levi-civita symbol in that dimension.
@@ -496,22 +585,16 @@ class Fluid:
         #curl_mask = np.triu(np.ones(jacobian_shape, dtype=bool), k=1)
         #curl = (jacobian[curl_mask] - jacobian[curl_mask.T]).squeeze()
 
-        # Apply the pressure correction to the fluid's velocity field.
-        pressure = self.pressure_solver(self.divergence(self.velocity).flatten()).reshape(self.shape)
-        #pressure_solverは圧力の差分行列が仕込まれたfactorized関数。これに右辺を入れることで計算を行う。これは陰解法を解くのに有効な手段である。
-        self.velocity -= np.gradient(pressure)
 
-        setattr(self, 'quantities_clouddrop', advect(getattr(self, 'quantities_clouddrop')))
-        setattr(self, 'quantities_vapor', advect(getattr(self, 'quantities_vapor')))
-        setattr(self, 'quantities_raindrop', advect(getattr(self, 'quantities_raindrop')))
-        setattr(self, 'temperature', advect(getattr(self, 'temperature')))
 
-        self.update_quantities(self)
-        self.update_temperature(self)
-        self.boundary_condition(self)
-        self.update_time(self)
 
-        curl = self.rotate(self, 'velocity')
-        div = self.divergence(self, 'velocity')
 
-        return div, curl, pressure
+        # setattr(self, 'quantities_clouddrop', advect(getattr(self, 'quantities_clouddrop')))
+        # setattr(self, 'quantities_vapor', advect(getattr(self, 'quantities_vapor')))
+        # setattr(self, 'quantities_raindrop', advect(getattr(self, 'quantities_raindrop')))
+        # setattr(self, 'temperature', advect(getattr(self, 'temperature')))
+
+        #curl = self.rotate(self, 'velocity')
+        #div = self.divergence(self, 'velocity')
+
+        #return div, curl, pressure
