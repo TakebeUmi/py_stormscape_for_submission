@@ -23,3 +23,11 @@ print関数を書く 10/27
 移流項 10/28
 投影 10/29
 ヤコビ法10/27
+
+clouddropが少しずつ増えていくようにしたい
+->clouddropの減少分を少なくしよう（Ac,Kc）
+なぜTが少しずつ増えていくのか？
+ゼロ除算エラーをなくす
+vorticity confinementをするとTが爆増する
+
+print(f"Max value of pressure: {np.max(self.pressure)}")

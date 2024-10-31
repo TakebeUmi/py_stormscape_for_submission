@@ -9,11 +9,12 @@ from PIL import Image
 import os
 
 ###定数の具体的な値
-xyz = 50
-RESOLUTION =(xyz, ) * 3
-DURATION = 500
+xy = 50
+z = 50
+RESOLUTION = xy, xy, z
+DURATION = 100
 #今は適当な値を入れてるので後で値入れる
-EPSILON = 0.01
+EPSILON = 1e-5
 DELTA_X = 0.1
 
 # INFLOW_PADDING = 40
@@ -24,14 +25,14 @@ DELTA_X = 0.1
 # 必須の引数
 #shape, *quantities, delta_x, epsilon, delta_t, z1, externalForce, phi_rel, gamma_heat, gamma_vapor, E
 delta_x = 50 #m 全長3840m * 1520m * 3840m
-epsilon = 0.25
-delta_t = 10 #s
+epsilon = 0.25e-2
+delta_t = 60 #s
 z1 = 8000 #m
-externalForce = [0.0, 0.0, 0.0]
-phi_rel = 0.9
-gamma_heat = 0.3
-gamma_vapor = 0.295
-E = 7.0
+externalForce = [0.0, 0.0, 0.005]
+phi_rel = 1.0
+gamma_heat = 0.
+gamma_vapor = 0.
+E = 0.5
 #E,gamma_heat,gamma_vapor,phi_relが形状を決定する
 # オプションの引数 quantities のみ指定し、pressure_order と advect_order を省略
 quantities = ('quantities_clouddrop','quantities_raindrop','quantities_vapor')
@@ -119,12 +120,15 @@ for f in range(DURATION):
     vdb.write(file_name, grids=[vdb_grid])
     file_name = 'density_memo.txt'
     with open(file_name, "a") as file:
-            file.write(f"{cloud.quantities_clouddrop}\n")
+            file.write(f"{np.max(cloud.quantities_clouddrop)}\n")
     #print('color_shape=',color.shape)
     #color = (np.clip(color, 0, 1) * 255).astype('uint8')
     #frames.append(Image.fromarray(color, mode='HSV').convert('RGB'))
 
 print('Saving simulation result.')
+file_name = 'density_memo.txt'
+with open(file_name, "a") as file:
+            file.write(f"\n")
 
 #frames[0].save('example3d.gif', save_all=True, append_images=frames[1:], duration=20, loop=0)
 #課題：100*100*100のグリッドの10*10*10の領域で速度１を供給する
