@@ -9,10 +9,10 @@ from PIL import Image
 import os
 
 ###定数の具体的な値
-xy = 50
-z = 50
+xy = 40
+z = 60
 RESOLUTION = xy, xy, z
-DURATION = 100
+DURATION = 200
 #今は適当な値を入れてるので後で値入れる
 EPSILON = 1e-5
 DELTA_X = 0.1
@@ -24,11 +24,11 @@ DELTA_X = 0.1
 # INFLOW_COUNT = 5
 # 必須の引数
 #shape, *quantities, delta_x, epsilon, delta_t, z1, externalForce, phi_rel, gamma_heat, gamma_vapor, E
-delta_x = 50 #m 全長3840m * 1520m * 3840m
+delta_x = 60 #m 全長3840m * 1520m * 3840m
 epsilon = 0.25e-2
 delta_t = 60 #s
 z1 = 8000 #m
-externalForce = [0.0, 0.0, 0.005]
+externalForce = [0.0, 0.0, 0.01]
 phi_rel = 1.0
 gamma_heat = 0.
 gamma_vapor = 0.
@@ -111,13 +111,14 @@ for f in range(DURATION):
     vdb_grid.copyFromArray(cloud.quantities_clouddrop * 10)
     vdb_grid_100.copyFromArray(cloud.quantities_clouddrop * 100)
     #課題：fluid.dyeの描画。np.arrayからopenvdbへ
-    output_dir = f"output_cube_fluid_{x}"
-    output_dir_100 = f"output_cube_fluid_100times_{x}"
+    output_dir = f"output/output_cube_fluid_{x}"
+    output_dir_100 = f"output/output_cube_fluid_100times_{x}"
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(output_dir_100, exist_ok=True)
     file_name = f"{output_dir}/output_cube_fluid_{x}_frame_{f:04d}.vdb"
-    file_name_100 = f"{output_dir}/output_cube_fluid_100times_{x}_frame_{f:04d}.vdb"
+    file_name_100 = f"{output_dir_100}/output_cube_fluid_100times_{x}_frame_{f:04d}.vdb"
     vdb.write(file_name, grids=[vdb_grid])
+    vdb.write(file_name_100, grids=[vdb_grid_100])
     file_name = 'density_memo.txt'
     with open(file_name, "a") as file:
             file.write(f"{np.max(cloud.quantities_clouddrop)}\n")

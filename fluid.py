@@ -439,12 +439,14 @@ class Fluid:
                        
                        B[2,i,j,k] = self.gravity * (self.M_air * T_th[i,j,k] / (M_th[i,j,k] * self.T_air[i,j,k]) - 1)
         print(f"Max value of buoancy: {np.max(B)}")
+        print(f"min value of buoancy: {np.min(B)}")
         #print('buoyancy calculated')
 
         return B
     
      def apply_b_external(self):
          b = self.compute_buoyancy()
+         
          e = np.zeros((self.dimensions, *self.shape))
          for i in range(self.shape[0]):
              for j in range(self.shape[1]):
@@ -593,7 +595,7 @@ class Fluid:
         #9,10
         print(f"Max value of pressure(before boundary): {np.max(self.pressure)}")
         # Apply the pressure correction to the fluid's velocity field.
-        pressure = self.pressure_solver(self.divergence('velocity').flatten()).reshape(self.shape) * 1e-1
+        pressure = self.pressure_solver(self.divergence('velocity').flatten()).reshape(self.shape) * 1e-3
         
         self.pressure += pressure
         print(f"Max value of pressure(after boundary): {np.max(self.pressure)}")
@@ -627,6 +629,11 @@ class Fluid:
         print(f"min value of temperature: {np.min(self.temperature)}")
         print(f"Max value of pressure: {np.max(self.pressure)}")
         print(f"min value of pressure: {np.min(self.pressure)}")
+        print(f"MAX value of mid cloud: {np.max(self.quantities_clouddrop[:,:,self.shape[2]//2])}")
+        print(f"min value of mid cloud: {np.min(self.quantities_clouddrop[:,:,self.shape[2]//2])}")
+        print(f"MAX value of floor cloud: {np.max(self.quantities_clouddrop[:,:,-2])}")
+        print(f"min value of floor cloud: {np.min(self.quantities_clouddrop[:,:,-2])}")
+
         if (np.max(self.temperature) > 500):
             sys.exit("処理を強制的に終了しました")
         # Compute the jacobian at each point in the
