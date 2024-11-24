@@ -207,13 +207,31 @@ class Fluid:
                          x[i,j,k] = x0[i,j,k] + a * (x[i-1,j,k] + x[i+1,j,k] + x[i,j+1,k] + x[i,j-1,k] + x[i,j,k+1] + x[i,j,k-1]) / c
           return x
      
+     def laplacian_matrix_3d(self):
+        dx = self.delta_x
+        derivative = 2
+        diff_coefficients, _ = difference(derivative, accuracy=1)
+        laplacian = operator(self.shape, (diff_coefficients / dx**2, _))
+        return laplacian
+
+
+     def diffuse(self, ):
+        #  MAX = max(max(self.shape[0], self.shape[1]), self.shape[2])
+        #  a = dt*diff*MAX**3
+        #  return self.lin_solve(b, x, x0, x0, a, 1+6*a)
+        laplacian = laplacian_matrix_3d()
+        A = sp.identity(laplacian.shape[0]) - self.nu * laplacian
+        N = np.prod(self.shape)
+        b = getattr(self)
+        x, info = cg(A, b, tol=1e-8)
+        
      #速度の拡散の計算
-     def diffuse_velocity(self):
-         v0 = np.copy(self.velocity)
-         v1 = np.copy(self.velocity)
-         self.velocity[0] = self.lin_solve(v1[0], v0[0], self.a, 1+6*self.a)
-         self.velocity[1] = self.lin_solve(v1[1], v0[1], self.a, 1+6*self.a)
-         self.velocity[2] = self.lin_solve(v1[2], v0[2], self.a, 1+6*self.a)
+    #  def diffuse_velocity(self):
+    #      v0 = np.copy(self.velocity)
+    #      v1 = np.copy(self.velocity)
+    #      self.velocity[0] = self.lin_solve(v1[0], v0[0], self.a, 1+6*self.a)
+    #      self.velocity[1] = self.lin_solve(v1[1], v0[1], self.a, 1+6*self.a)
+    #      self.velocity[2] = self.lin_solve(v1[2], v0[2], self.a, 1+6*self.a)
 
 
      #スカラー量の移流の計算
