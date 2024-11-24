@@ -7,6 +7,8 @@ import math
 from noise import pnoise2
 from enum import Enum
 import sys
+import scipy.sparse as sp
+from scipy.sparse.linalg import cg
 
 from numerical import difference, operator
 
@@ -219,11 +221,40 @@ class Fluid:
         #  MAX = max(max(self.shape[0], self.shape[1]), self.shape[2])
         #  a = dt*diff*MAX**3
         #  return self.lin_solve(b, x, x0, x0, a, 1+6*a)
-        laplacian = laplacian_matrix_3d()
+        laplacian = self.laplacian_matrix_3d()
         A = sp.identity(laplacian.shape[0]) - self.nu * laplacian
         N = np.prod(self.shape)
         b = getattr(self)
         x, info = cg(A, b, tol=1e-8)
+    
+     def compute_divergence(self):
+         div = np.zeros(self.shape)
+         for i in range(self.dimensions):
+             diff = (np.roll(self.velocity[i], -1, axis=i) - self.velocity[i]) / self.delta_x
+             div += diff
+         return div
+     
+     def correct_velocity(self):
+         grad_p = np.gradient(self.pressure, self.delta_x, edge_order=2)
+         for i in range(self.dimensions):
+             self.velocity[i] -= grad_p[i]
+
+     def pressure_projection(self):     
+        diff_coefficients, points = difference(2, accuracy=1)
+        laplacian = operator(self.shape, (diff_coefficients / self.delta_x**2, points))
+
+        divergence = self.compute_divergence().flatten()
+        A = laplacian
+        b = -divergence
+        pressure, info = cg(A, b, tol=1e-8)
+        if info == 0:
+            print("CG法は正常に収束しました")
+        else:
+            print("CG法は収束しませんでした。info =", info)
+        
+        self.correct_velocity()
+
+     
         
      #速度の拡散の計算
     #  def diffuse_velocity(self):
@@ -417,6 +448,8 @@ class Fluid:
          Ac = self.alpha_A * (qc - 1.0e-3)
          Kc = self.alpha_K * qc * qr
          Er = self.alpha_E * qc * np.sqrt(qr)
+
+         
          print(f"Max value of qvs: {np.max(qvs)}")
          for i in range(self.shape[0]):
             for j in range(self.shape[1]):
