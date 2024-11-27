@@ -224,8 +224,9 @@ class Fluid:
         laplacian = self.laplacian_matrix_3d()
         A = sp.identity(laplacian.shape[0]) - self.nu * laplacian
         N = np.prod(self.shape)
-        b = element
-        x, info = cg(A, b, tol=1e-8)
+        b = element.ravel()
+        x, info = cg(A, b, atol=1e-8)
+        x = x.reshape(element.shape)
         return x
      
      def diffuse_velocity(self):
@@ -255,7 +256,7 @@ class Fluid:
         divergence = self.compute_divergence().flatten()
         A = laplacian
         b = -divergence
-        pressure, info = cg(A, b, tol=1e-8)
+        pressure, info = cg(A, b, atol=1e-8)
         if info == 0:
             print("CG法は正常に収束しました")
         else:
@@ -513,7 +514,7 @@ class Fluid:
         self.pressure_projection()
         print(f"Max value of pressure(after boundary): {np.max(self.pressure)}")
 
-        self.velocity -= np.gradient(pressure)
+        # self.velocity -= np.gradient(self.pressure)
         #11.スカラー場の移流
         self.advect_scalar_field()
         setattr(self, 'temperature', advect(getattr(self, 'temperature')))

@@ -5,12 +5,11 @@ from scipy.special import erf
 
 from fluid import Fluid
 import pyopenvdb as vdb
-from PIL import Image
 import os
 
 ###使用するグリッドのサイズとユーザーが設定するパラメータ群
-xy = 40
-z = 60
+xy = 50
+z = 70
 RESOLUTION = xy, xy, z
 DURATION = 200
 delta_x = 60 #m 
