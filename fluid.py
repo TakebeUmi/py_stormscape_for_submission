@@ -217,15 +217,24 @@ class Fluid:
         return laplacian
 
 
-     def diffuse(self, ):
+     def diffuse(self, element):
         #  MAX = max(max(self.shape[0], self.shape[1]), self.shape[2])
         #  a = dt*diff*MAX**3
         #  return self.lin_solve(b, x, x0, x0, a, 1+6*a)
         laplacian = self.laplacian_matrix_3d()
         A = sp.identity(laplacian.shape[0]) - self.nu * laplacian
         N = np.prod(self.shape)
-        b = getattr(self)
+        b = element
         x, info = cg(A, b, tol=1e-8)
+        return x
+     
+     def diffuse_velocity(self):
+        vx = self.velocity[0]
+        vy = self.velocity[1]
+        vz = self.velocity[2]
+        self.velocity[0] = self.diffuse(vx)
+        self.velocity[1] = self.diffuse(vy)
+        self.velocity[2] = self.diffuse(vz)
     
      def compute_divergence(self):
          div = np.zeros(self.shape)
@@ -499,8 +508,9 @@ class Fluid:
         self.apply_b_external()
         self.boundary_condition()
         #9,10.投影
-        pressure = self.pressure_solver(self.divergence('velocity').flatten()).reshape(self.shape) * 1e-3
-        self.pressure += pressure
+        # pressure = self.pressure_solver(self.divergence('velocity').flatten()).reshape(self.shape) * 1e-3
+        # self.pressure += pressure
+        self.pressure_projection()
         print(f"Max value of pressure(after boundary): {np.max(self.pressure)}")
 
         self.velocity -= np.gradient(pressure)
