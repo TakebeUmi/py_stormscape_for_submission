@@ -8,18 +8,18 @@ import pyopenvdb as vdb
 import os
 
 ###使用するグリッドのサイズとユーザーが設定するパラメータ群
-xy = 50
-z = 70
+xy = 30
+z = 30
 RESOLUTION = xy, xy, z
-DURATION = 200
-delta_x = 60 #m 
+DURATION = 50
+delta_x = 50 #m 
 epsilon = 0.25e-2
 delta_t = 60 #s
 z1 = 8000 #m
-externalForce = [0.0, 0.0, 0.01]
+externalForce = [0.0, 0.0, 0.0]
 phi_rel = 1.0
-gamma_heat = 0.
-gamma_vapor = 0.
+gamma_heat = 1.27
+gamma_vapor = 0.13
 E = 0.5
 quantities = ('quantities_clouddrop','quantities_raindrop','quantities_vapor')
 
@@ -61,8 +61,14 @@ for f in range(DURATION):
     vdb.write(file_name, grids=[vdb_grid])
     vdb.write(file_name_100, grids=[vdb_grid_100])
     file_name = 'density_memo.txt'
-    with open(file_name, "a") as file:
-            file.write(f"{np.max(cloud.quantities_clouddrop)}\n")
+    # np.savetxt('quantities_clouddrop.txt',cloud.quantities_clouddrop[:,cloud.shape[0]//2,:])
+    # np.savetxt('quantities_vapor.txt',cloud.quantities_vapor[:,cloud.shape[0]//2,:])
+    with open('quantities_clouddrop.txt', 'a') as f:
+        f.write(f"# Time step {cloud.time}\n")
+        np.savetxt(f, cloud.quantities_clouddrop[:,cloud.shape[0]//2,:], fmt='%.6f')
+    with open('quantities_vapor.txt', 'a') as f:
+        f.write(f"# Time step {cloud.time}\n")
+        np.savetxt(f, cloud.quantities_vapor[:,cloud.shape[0]//2,:], fmt='%.6f')
 
 print('Saving simulation result.')
 

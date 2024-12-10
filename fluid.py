@@ -50,8 +50,8 @@ class Fluid:
         scale = 10.0
         for i in range(shape[0]):
              for j in range(shape[1]):
-                  self.vapor_map[i,j] = pnoise2(i / scale, j / scale, octaves=4, persistence=0.5, lacunarity=2.0, repeatx=1024, repeaty=1024, base=0)
-                  self.heat_map[i,j] = pnoise2(i / scale, j / scale, octaves=4, persistence=0.5, lacunarity=2.0, repeatx=1024, repeaty=1024, base=0)
+                  self.vapor_map[i,j] = (pnoise2(i / scale, j / scale, octaves=4, persistence=0.5, lacunarity=2.0, repeatx=1024, repeaty=1024, base=0) + 1)/2
+                  self.heat_map[i,j] = (pnoise2(i / scale, j / scale, octaves=4, persistence=0.5, lacunarity=2.0, repeatx=1024, repeaty=1024, base=0) + 1) / 2
 
         self.Rd = 287 #J/(kg K)
         self.latenthead = 2.5
@@ -513,6 +513,7 @@ class Fluid:
         # self.pressure += pressure
         self.pressure_projection()
         print(f"Max value of pressure(after boundary): {np.max(self.pressure)}")
+        print(f"Max value of clouddrop: {np.max(self.quantities_clouddrop)}")
 
         # self.velocity -= np.gradient(self.pressure)
         #11.スカラー場の移流
